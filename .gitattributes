@@ -1,0 +1,30 @@
+# 二进制文件：不做行级 diff / merge，避免仓库膨胀
+*.exe    binary
+*.dll    binary
+*.xlsx   binary
+*.xls    binary
+*.docx   binary
+*.doc    binary
+*.pptx   binary
+*.pdf    binary
+*.zip    binary
+*.7z     binary
+*.rar    binary
+*.ico    binary
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+
+# 文本文件换行符：源码与文档统一 LF
+*.py     text eol=lf
+*.md     text eol=lf
+*.json   text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+*.spec   text eol=lf
+*.gitignore      text eol=lf
+*.gitattributes  text eol=lf
+
+# Windows 批处理必须 CRLF，转成 LF 后双击会执行异常
+*.bat    text eol=crlf
+*.cmd    text eol=crlf

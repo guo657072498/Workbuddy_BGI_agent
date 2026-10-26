@@ -21,14 +21,26 @@ venv/
 env/
 .pytest_cache/
 .ipynb_checkpoints/
+*.egg-info/
 
 # ---- Node.js ----
 node_modules/
-dist/
-build/
 npm-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# ---- 构建中间产物 ----
+# 注意：根目录的 dist/ 是通用构建输出，忽略
+# 任务内的 dist/ 是交付物（exe 等），必须入库，所以这里加 / 锁定只匹配根目录
+/dist/
+build/
+
+# ---- 任务运行产物（可由代码或输入重新生成，不入库）----
+# 规范约定：成品只能放 dist/（代码类）或 deliverables/（文档类）
+# 放在这些目录里的一律视为过程产物
+_out/
+output/
+输出结果/
 
 # ---- 环境变量与密钥（严禁提交）----
 .env
@@ -49,12 +61,14 @@ temp/
 *.tmp
 *.bak
 ~$*
+*.stackdump
 
 # ---- 办公类临时文件 ----
-*.stackdump
 .~lock.*#
 
-# ---- WorkBuddy 本地运行时（保留 memory，忽略缓存）----
-.workbuddy/cache/
-.workbuddy/tmp/
-.workbuddy/sessions/
+# ---- WorkBuddy 本地运行时 ----
+# 白名单模式：只保留 memory（长期笔记），其余一律忽略
+# 这样将来新增 logs/、state/、index/ 等目录也不会被静默入库
+.workbuddy/*
+!.workbuddy/memory/
+!.workbuddy/memory/**
