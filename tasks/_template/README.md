@@ -28,14 +28,29 @@
 
 ## 目录结构
 
+**代码类**
+
 ```
 YYYYMMDD-<英文短名>/
 ├── README.md          本文件
-├── src/               源码（代码类）
+├── src/               源码
 ├── dist/              最终交付产物（入库）
 ├── samples/           脱敏样例输入（入库，≤5MB）
 └── _out/              运行产物（不入库，可随时删）
 ```
+
+**文档类**
+
+```
+YYYYMMDD-<英文短名>/
+├── README.md          本文件
+├── deliverables/      最终 Excel/Word/PDF（入库）
+├── samples/           参考输入、模板（入库）
+└── _out/              中间稿、试算表（不入库，可随时删）
+```
+
+> 交付物叫 `output` 之类也没关系，放 `deliverables/` 下就不会被忽略；
+> 但放进 `tasks/<任务>/output/` 会被 `.gitignore` 静默丢弃。
 
 ## 说明与遗留
 

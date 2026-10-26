@@ -2,6 +2,8 @@
 
 用户说**「归档」**时，按本手册的 6 步顺序执行。**不得跳步，不得因为"看起来没问题"就省略检查。**
 
+> 敏感信息的判定标准见 `docs/SECURITY.md`；本手册只写"怎么查"。
+
 ---
 
 ## 第 1 步 · 范围确认
@@ -20,6 +22,7 @@ git status --porcelain -uall
 ## 第 2 步 · 敏感信息扫描（强制，无例外）
 
 按下面四项逐一检查，**任一命中即停止归档**，先处理再重启流程。
+判定口径与脱敏方法见 `docs/SECURITY.md`。
 
 ### 2.1 凭据文件
 
@@ -39,18 +42,14 @@ git diff --cached -U0 | grep -inE "password|passwd|secret|token|api[_-]?key|acce
 
 ### 2.3 样例数据里的真实信息（**办公类任务最高风险项**）
 
-这是最容易出事的地方。检查 `samples/`、`deliverables/`、测试数据里是否含：
+检查 `samples/`、`deliverables/`、测试数据里是否含真实客户、患者、员工信息。
+字段清单和脱敏对照表见 `docs/SECURITY.md` 第 3 节。
 
-- 真实客户名称、联系人、电话、身份证号、地址
-- 真实病历、诊断信息、患者姓名（本仓库做过 UDI 医疗器械相关任务，尤其注意）
-- 真实员工姓名、工号、薪酬
-
-含真实信息 → 替换为脱敏样例（姓名改"张三"、编号改规律数字），**不是删掉了事**，因为样例本身有价值。
+含真实信息 → 替换为脱敏样例并**重跑一次程序**确认逻辑仍通过，**不是删掉了事**，因为样例本身有价值。
 
 ### 2.4 Office 文档属性
 
-交付出去的 Excel/Word/PDF，其"文档属性"里可能带作者名、公司名、原始路径。
-对**要给外部**的成品，检查一下；内部留档可放宽。
+对**要给外部**的成品，检查"文档属性"里的作者、公司、原始路径；内部留档可放宽。
 
 ---
 
@@ -58,9 +57,13 @@ git diff --cached -U0 | grep -inE "password|passwd|secret|token|api[_-]?key|acce
 
 ### 3.1 体积阈值
 
+按本次改动涉及的文件逐个取真实 blob 体积（`git cat-file -s` 读的是已入库对象，对未跟踪文件不适用，因此先用 `git add` 暂存再查索引）：
+
 ```bash
-git add -A --dry-run | sed 's/^add //' | tr -d "'" | while read -r f; do
-  [ -f "$f" ] && echo "$(stat -c%s "$f") $f"
+git add -A
+git diff --cached --name-only | while read -r f; do
+  git cat-file -s "$(git rev-parse ":$f" 2>/dev/null)" 2>/dev/null \
+    | awk -v f="$f" '{printf "%10.1f MB  %s\n", $1/1048576, f}'
 done | sort -rn | head -10
 ```
 
@@ -71,22 +74,37 @@ done | sort -rn | head -10
 | < 10 MB | 正常入库 |
 
 > 参照：GitHub 单文件硬上限 100 MB，超过会拒绝推送。
+> 注意：第 1 步之后若发现范围不对，用 `git restore --staged .` 撤销暂存。
 
-### 3.2 产物误入检查
+### 3.2 运行产物误入检查
+
+**关键认知：被 `.gitignore` 忽略的文件不会出现在 `git add --dry-run` 里。**
+所以不能用它判断"`.gitignore` 是否失效"——它只能发现"文件被强制加入"。要分开查两件事：
 
 ```bash
-git add -A --dry-run | grep -E "_out/|/output/|输出结果/"
+# (a) 忽略规则本身是否仍生效（应逐个命中，命中说明规则有效）
+git check-ignore -v tasks/*/output/x.xlsx tasks/*/输出结果/x.xlsx tasks/*/_out/x.txt
+
+# (b) 已经存在于版本库中的运行产物（规则失效的历史遗留）
+git ls-files | grep -E "tasks/[^/]+/(_out|output|输出结果)/"
 ```
 
-**有任何输出 → 立即停止。** 这说明 `.gitignore` 失效，或文件被放错了位置（成品应按规范放 `dist/` 或 `deliverables/`）。
+- (a) **没有任何输出** → `.gitignore` 规则被误改，立即修正
+- (b) **有任何输出** → 停止。这些文件已被跟踪，规则对它们无效，需 `git rm -r --cached <路径>`
 
 ### 3.3 构建中间产物
 
+同样分两层查：
+
 ```bash
-git add -A --dry-run | grep -E "build/|__pycache__|\.pyc$|\.egg-info"
+# (a) 规则有效性
+git check-ignore -v __pycache__/x.pyc node_modules/x/x.js build/x.txt
+
+# (b) 已入库的中间产物
+git ls-files | grep -E "__pycache__|\.pyc$|\.egg-info|/build/"
 ```
 
-有输出 → 停止，检查 `.gitignore`。
+(b) 有输出 → 停止，`git rm -r --cached` 清理后再归档。
 
 ---
 
@@ -100,6 +118,7 @@ git add -A --dry-run | grep -E "build/|__pycache__|\.pyc$|\.egg-info"
 - [ ] 根 `README.md` 索引表里有该任务行，且状态列用词在词表内
 - [ ] 根索引的「位置」链接能点到（路径正确、含日期前缀）
 - [ ] 若本任务产生了新交付物，其路径已写进任务 README
+- [ ] `docs/` 下的规范文件若有改动，`AGENTS.md` 的文档地图是否仍准确
 
 ---
 
@@ -129,8 +148,11 @@ git add -A --dry-run | grep -E "build/|__pycache__|\.pyc$|\.egg-info"
 
 ## 第 6 步 · 提交与推送
 
+第 1 步确认范围后，**按具体路径暂存**，不要用 `git add -A` 把 IDE 的自动改动一起裹进去：
+
 ```bash
-git add -A
+git add tasks/<任务名> README.md docs/ .workbuddy/memory/<今天>.md
+git status --porcelain          # 再确认一次暂存内容
 git commit -m "<类型>(<任务名>): <说明>"
 git push origin main
 ```
@@ -139,13 +161,7 @@ git push origin main
 
 `<类型>(<任务名>): <中文说明>`
 
-| 类型 | 场景 | 示例 |
-|---|---|---|
-| `feat` | 新任务 / 新功能 | `feat(20261026-udi-xml-tool): 支持 zip 批量转换` |
-| `fix` | 修 bug | `fix(20261026-udi-xml-tool): 修正箱码切块逻辑` |
-| `docs` | 只改文档 | `docs: 更新任务索引` |
-| `chore` | 规范、配置 | `chore: 修正 gitignore 的 dist 规则` |
-| `archive` | 归档动作 | `archive(20261026-udi-xml-tool): 完成归档` |
+类型取值：`feat` / `fix` / `docs` / `chore` / `archive`，含义见 `AGENTS.md`「提交信息」一节。
 
 ### 推送后
 
@@ -161,10 +177,11 @@ git push origin main
 | `dist/` 里的最终 exe / 安装包 | **入库** | 用户双击用的成品，不入库则仓库对该任务零价值 |
 | `deliverables/` 里的成品 Excel/Word/PDF | **入库** | 结论态文档 |
 | 源码、配置、bat、spec | **入库** | 文本，体积小 |
-| `_out/`、`output/`、`输出结果/` | **不入库** | 可由代码或输入重新生成 |
+| `tasks/*/` 下的 `_out/`、`output/`、`输出结果/` | **不入库** | 可由代码或输入重新生成 |
+| `deliverables/` 里叫 `output` 的东西 | **入库** | 它是交付物，名字不影响性质 |
 | 依赖（`node_modules`、`.venv`、`__pycache__`） | **不入库** | 可重装 |
 | > 50MB 原始数据 | **不入库** | README 记来源 |
-| 含密钥或真实个人信息的文件 | **不入库** | 安全底线；样例需脱敏 |
+| 含密钥或真实个人信息的文件 | **不入库** | 安全底线，见 `docs/SECURITY.md` |
 
 ### exe 更新策略
 
@@ -181,8 +198,11 @@ git push origin main
 **Q：任务做到一半，用户说"归档"？**
 照常执行，但状态列填 `进行中` 或 `暂停`。归档不等于任务完成，它只是"把当前进度安全存到远端"。
 
+**Q："已完成"和"已归档"有什么区别？**
+`已完成` 是**任务状态**（活儿干完了）；`已归档` 表示**文件夹被移进了 `archive/`**。常规归档动作**不改状态**，状态继续反映任务真实进度。只有用户明确说"彻底归档/这里不用了"才移文件夹并填 `已归档`。
+
 **Q：用户说"彻底归档"或"这里不用了"？**
-这种情况下才考虑把任务移入 `archive/` 目录。移动用 `git mv`，并在根索引的状态列改为 `已归档`。
+这种情况下才把任务移入 `archive/` 目录。移动用 `git mv`，并在根索引的状态列改为 `已归档`。
 默认的「归档」**不移动文件夹**。
 
 **Q：`git push` 要求输入密码？**

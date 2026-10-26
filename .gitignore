@@ -38,9 +38,16 @@ build/
 # ---- 任务运行产物（可由代码或输入重新生成，不入库）----
 # 规范约定：成品只能放 dist/（代码类）或 deliverables/（文档类）
 # 放在这些目录里的一律视为过程产物
-_out/
-output/
-输出结果/
+# 注意：只匹配 tasks/ 下的一层任务目录，不匹配任意层级。
+# 原因：output/ 是通用名，任意层级匹配会静默吞掉将来叫 output 的交付物。
+# 例：tasks/20261026-udi-xml-tool/output/ ✓ 被忽略
+#     tasks/xxx/deliverables/output/        ✗ 不受影响
+tasks/*/_out/
+tasks/*/output/
+tasks/*/输出结果/
+# dist/ 里只该有成品 exe，混进来的运行结果目录一并忽略
+# （实测：从 dist 里运行 exe 会生成 dist/输出结果/，这属于运行产物不是交付物）
+tasks/*/dist/输出结果/
 
 # ---- 环境变量与密钥（严禁提交）----
 .env
