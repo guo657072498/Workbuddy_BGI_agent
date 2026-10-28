@@ -7,7 +7,7 @@
 
 | 任务 | 状态 | 类型 | 创建 | 一句话说明 | 位置 |
 |---|---|---|---|---|---|
-| 20261026-udi-xml-tool | 已完成 | 代码 | 2026-10-26 | UDI 系统 XML 转 Excel，免安装 exe，支持压缩包批量 | [详情](tasks/20261026-udi-xml-tool/README.md) |
+| 20261026-udi-xml-tool | 已完成 | 代码 | 2026-10-26 | UDI XML 转 Excel（v2.0.0），免安装 exe，支持压缩包批量与主数据映射 | [详情](tasks/20261026-udi-xml-tool/README.md) · [版本](tasks/20261026-udi-xml-tool/VERSIONS.md) |
 | 20261026-docs-refactor | 已完成 | 文档 | 2026-10-26 | 规范文档拆分：敏感清单收口、README 瘦身、gitignore 收紧 | [详情](tasks/20261026-docs-refactor/README.md) |
 
 **状态词**（只允许这 5 个值）：`进行中` / `已完成` / `已归档` / `暂停` / `废弃`
@@ -30,7 +30,7 @@
 |---|---|
 | `tasks/` | 所有任务，命名 `YYYYMMDD-英文短名`（日期=创建日，永不改） |
 | `tasks/_template/` | 新任务 README 骨架 |
-| `AGENTS.md` | 规则源：身份、命名、目录三分法、状态词、提交格式 |
+| `AGENTS.md` | 规则源：身份、命名、目录三分法、状态词、版本管理、提交格式 |
 | `docs/ARCHIVE.md` | 归档执行手册（6 步命令） |
 | `docs/SECURITY.md` | 敏感信息唯一权威清单 |
 | `.workbuddy/memory/` | 工作日志，按日期记录 |
