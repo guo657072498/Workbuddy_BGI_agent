@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 样例数据：全部为虚构内容，30 位码为递增序号，机构码/名称均为示例，不含任何真实业务数据。 -->
+<Document xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:noNamespaceSchemaLocation="终端接口XML Schema-3.0.xsd">
+  <DocHeader DocOwner="DEMO" DocType="DN" StoreType="SalesOut"
+             StoreNo="DN20240001" BillTime="2024/7/5 10:30:00"
+             Operator="张三" OperateDate="2024/7/5 10:31:00"
+             StoreNoExt="" CustomerNo="" Remark="样例单"/>
+  <HasProducts>
+    <Product Code="06974783040208" BatchNo="B240705" Amount="2" PackUnit="盒" HasCodes="1"/>
+  </HasProducts>
+  <Events>
+    <Event Name="销售出库" MainAction="SalesWareHouseOut">
+      <DataField>
+        <!-- 第 1 条：DI码与机构码都能在主数据里查到 -->
+        <Data Code="690123456789012345678901234001" ProductCode="06974783040208"
+              OwnerCorpID="A100" ToCorpID="A080" Actor="张三"
+              ActDate="2024/7/5 10:30:12" CorpOrderID="PO-001" WrongCode="False"/>
+        <!-- 第 2 条：DI码查不到，客户机构码也查不到，应产出 M_PRODUCT_NOT_FOUND / M_CORP_NOT_FOUND -->
+        <Data Code="690123456789012345678901234002" ProductCode="06974783049999"
+              OwnerCorpID="A100" ToCorpID="A999" Actor="张三"
+              ActDate="2024/7/5 10:30:30" CorpOrderID="PO-001" WrongCode="False"/>
+      </DataField>
+    </Event>
+  </Events>
+</Document>

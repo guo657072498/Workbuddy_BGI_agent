@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 样例数据：故意不提供 StoreNo（DN号），用于验证输出文件名回退到源文件名。 -->
+<Document xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:noNamespaceSchemaLocation="终端接口XML Schema-3.0.xsd">
+  <DocHeader DocOwner="DEMO" DocType="DN" StoreType="SalesOut"
+             StoreNo="" BillTime="2024/7/5 11:00:00"
+             Operator="李四" OperateDate="2024/7/5 11:01:00"/>
+  <HasProducts>
+    <Product Code="06974783040192" BatchNo="B240706" Amount="1" PackUnit="箱" HasCodes="1"/>
+  </HasProducts>
+  <Events>
+    <Event Name="销售出库" MainAction="SalesWareHouseOut">
+      <DataField>
+        <Data Code="690123456789012345678901234003" ProductCode="06974783040192"
+              OwnerCorpID="A100" ToCorpID="A080" Actor="李四"
+              ActDate="2024/7/5 11:00:05" CorpOrderID="" WrongCode="False"/>
+      </DataField>
+    </Event>
+  </Events>
+</Document>

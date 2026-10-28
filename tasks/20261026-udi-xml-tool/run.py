@@ -31,9 +31,9 @@ _fix_console()
 
 
 from config import columns as C                                    # noqa: E402
-from udi_parser import crosscheck, detect, flatten, parse_bill      # noqa: E402
-from udi_parser import parse_relation, validate                     # noqa: E402
-from xlsx import verify_file, write_workbook                        # noqa: E402
+from converter import convert                                      # noqa: E402
+from udi_parser import detect                                      # noqa: E402
+from udi_parser import source as src_mod                           # noqa: E402
 
 TYPE_BILL = detect.TYPE_BILL
 TYPE_RELATION = detect.TYPE_RELATION
@@ -42,7 +42,11 @@ TYPE_RELATION = detect.TYPE_RELATION
 # ---------------------------------------------------------------- 收集文件
 
 def collect(paths):
-    """把传入的路径展开成 xml 文件列表。"""
+    """把传入的路径展开成 xml 文件列表（只用于打印预览）。
+
+    真正的展开（含 zip 内层）由 udi_parser.source.expand 负责，
+    这里只做「找不到路径」的提示和去重。
+    """
     out = []
     for p in paths:
         if os.path.isdir(p):
@@ -52,7 +56,6 @@ def collect(paths):
             out.append(p)
         else:
             print(f"  [跳过] 找不到：{p}")
-    # 去重并保持顺序
     seen, uniq = set(), []
     for p in out:
         ap = os.path.abspath(p)
@@ -62,74 +65,7 @@ def collect(paths):
     return uniq
 
 
-# ---------------------------------------------------------------- 单文件处理
-
-def process_one(path, out_dir, engine, cross_map=None, cross_issues=None):
-    """解析单个文件并写出 Excel。返回 (类型, xlsx路径, 行数信息)。"""
-    root = detect.load_root(path)
-    ftype, reason = detect.detect(root)
-    base = os.path.splitext(os.path.basename(path))[0]
-    out_path = os.path.join(out_dir, base + ".xlsx")
-
-    if ftype == TYPE_BILL:
-        doc = parse_bill.parse(path)
-        issues = validate.validate_bill(doc)
-        detail = flatten.bill_rows(doc)
-
-        # 有交叉索引则补充"所属箱码"
-        if cross_map:
-            for row in detail:
-                hit = cross_map.get(row["code"])
-                row["box_code_link"] = hit["box_code"] if hit else ""
-                row["batch_link"] = hit["batch_no"] if hit else ""
-        else:
-            for row in detail:
-                row["box_code_link"] = ""
-                row["batch_link"] = ""
-
-        cols = list(C.BILL_COLUMNS)
-        if cross_map or cross_issues:
-            # 追加两列（追加在 UDI码 后面较难，直接放末尾，用户可自行调序）
-            cols = cols + [
-                ("box_code_link", "所属箱码", "text", 32),
-                ("batch_link",    "所属批次", "text", 16),
-            ]
-        sheets = [
-            ("出入库明细", cols, detail),
-            ("产品汇总", C.BILL_SUMMARY_COLUMNS, flatten.bill_summary_rows(doc)),
-            ("校验", C.ISSUE_COLUMNS, _issue_rows(issues + list(cross_issues or []))),
-        ]
-        info = f"{len(doc.products)} 个产品 / {len(detail)} 条明细"
-    else:
-        doc = parse_relation.parse(path)
-        issues = validate.validate_relation(doc)
-        sheets = [
-            ("盒明细", C.BOX_ITEM_COLUMNS, flatten.box_item_rows(doc)),
-            ("箱汇总", C.BOX_COLUMNS, flatten.box_rows(doc)),
-            ("码清单", C.CODE_ALL_COLUMNS, flatten.code_all_rows(doc)),
-            ("校验", C.ISSUE_COLUMNS, _issue_rows(issues)),
-        ]
-        info = f"{doc.box_code_total} 箱 / {doc.box_total} 盒 / {doc.code_total} 个码"
-
-    used = write_workbook(out_path, sheets, engine=engine, highlight=C.HIGHLIGHT_ERROR)
-    vr = verify_file(out_path, sheets)
-
-    return {
-        "type": ftype,
-        "reason": reason,
-        "path": out_path,
-        "info": info,
-        "issues": issues,
-        "engine": used,
-        "verify": vr,
-        "doc": doc,
-    }
-
-
-def _issue_rows(issues):
-    return [{"level": i.level, "rule": i.rule, "location": i.location, "message": i.message}
-            for i in issues]
-
+# ---------------------------------------------------------------- 输出
 
 def _issue_stat(issues):
     if not issues:
@@ -143,61 +79,44 @@ def _issue_stat(issues):
 # ---------------------------------------------------------------- 主流程
 
 def run(input_paths, out_dir, engine):
-    files = collect(input_paths)
-    if not files:
-        print("没有找到任何 xml 文件。")
+    sources, expand_errors = src_mod.expand(input_paths)
+    for e in expand_errors:
+        print(f"  [提示] {e}")
+    if not sources:
+        print("没有找到任何可处理的 xml 或压缩包。")
         return 1
 
     os.makedirs(out_dir, exist_ok=True)
-    print(f"共 {len(files)} 个文件，输出到：{out_dir}\n")
+    print(f"共 {len(sources)} 个 xml（含压缩包内文件），输出到：{out_dir}\n")
 
-    # 第一遍：只解析，先建立码→箱的索引，供交叉校验
-    bill_docs, rel_docs, errors = [], [], []
-    for f in files:
-        try:
-            root = detect.load_root(f)
-            ftype, _ = detect.detect(root)
-            if ftype == TYPE_BILL:
-                bill_docs.append(parse_bill.parse(f))
-            else:
-                rel_docs.append(parse_relation.parse(f))
-        except Exception as e:
-            errors.append((f, e))
+    logs = []
 
-    cross_map, cross_issues = ({}, [])
-    if bill_docs and rel_docs:
-        cross_map, cross_issues = crosscheck.crosscheck(bill_docs, rel_docs)
+    def _log(msg, level="info"):
+        logs.append((level, msg))
+        print("  " + msg)
 
-    # 第二遍：逐文件写出
+    results, _ = convert(sources, out_dir, engine=engine, log=_log)
+
     ok = fail = 0
-    for f in files:
-        name = os.path.basename(f)
-        print(f"[{name}]")
-        try:
-            r = process_one(f, out_dir, engine, cross_map, cross_issues)
-            print(f"  类型：{detect.TYPE_LABEL[r['type']]}（{r['reason']}）")
-            print(f"  内容：{r['info']}")
-            print(f"  校验：{_issue_stat(r['issues'])}")
-            if not r["verify"].ok:
-                print(f"  ⚠ {r['verify']}")
-            print(f"  输出：{os.path.basename(r['path'])}  [{r['engine']}]")
+    for r in results:
+        print(f"[{r.display_name}]")
+        if r.ok:
+            print(f"  类型：{r.type_label}")
+            print(f"  内容：{r.info}")
+            print(f"  校验：{_issue_stat(r.issues)}")
+            if not r.verify_ok:
+                print(f"  ⚠ 写盘自检未通过，请抽查")
+            for w in r.warnings:
+                print(f"  ! {w}")
+            print(f"  输出：{os.path.basename(r.out_path)}  [{r.engine}]")
             ok += 1
-        except detect.DetectError as e:
-            print(f"  [失败] 无法识别：{e}")
+        else:
+            print(f"  [失败] {r.error}")
             fail += 1
-        except Exception as e:
-            print(f"  [失败] 处理失败：{e}")
-            fail += 1
-            if os.environ.get("UDI_DEBUG"):
-                traceback.print_exc()
         print()
 
     print("=" * 60)
     print(f"完成：成功 {ok} 个，失败 {fail} 个。输出目录：{out_dir}")
-    if cross_issues:
-        shown = len(cross_issues)
-        hit = len(cross_map)
-        print(f"交叉关联：{hit} 个码匹配到所属箱码，{shown} 条未能关联（提示级，不影响结果）")
     return 0 if fail == 0 else 2
 
 

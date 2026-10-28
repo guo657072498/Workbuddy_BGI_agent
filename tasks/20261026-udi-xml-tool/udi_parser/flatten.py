@@ -32,101 +32,32 @@ def code_part(code, start, end=None):
     return code[start:end] if end is not None else code[start:]
 
 
-# ---------------------------------------------------------------- 文件 A
+# ---------------------------------------------------------------- 销售出库单
 
-def bill_rows(doc: BillDoc):
-    """出入库单 -> 明细行字段。"""
+def bill_rows(doc: BillDoc, products=None, corps=None):
+    """销售出库单 -> 明细行字段。
+
+    products / corps 是主数据索引（masterdata.store.ProductIndex / CorpIndex）。
+    传 None 或查不到时，对应名称字段留空，由 validate 记提示。
+    """
     h = doc.header
-    declared = {p.code: p.amount for p in doc.products}
-    unit_map = {p.code: p.pack_unit for p in doc.products}
-
-    # 同一产品出现在多个明细里时，每个产品只填一次"声明数量"
     rows = []
     for ln in doc.lines:
-        code = ln.code
+        prod_name, prod_spec = products.lookup(ln.product_code) if products else ("", "")
         rows.append({
             "seq": ln.seq,
-            "file": doc.file_name,
             "store_no": h.store_no,
-            "doc_type": h.doc_type,
-            "store_type": h.store_type,
-            "direction": _direction(h),
-            "bill_time": h.bill_time,
-            "operate_date": h.operate_date,
-            "act_date": ln.act_date,
             "product_code": ln.product_code,
-            "code": code,
-            "pack_flag": code_part(code, 16, 18),
-            "serial": code_part(code, 18),
-            "pack_unit": unit_map.get(ln.product_code, ""),
-            "declared_amount": declared.get(ln.product_code, ""),
-            "operator": ln.actor or h.operator,
-            "owner_corp": ln.owner_corp_id,
-            "to_corp": ln.to_corp_id,
-            "corp_order": ln.corp_order_id,
-            "wrong_code": ln.wrong_code,
-            "ext1": ln.ext1, "ext2": ln.ext2, "ext3": ln.ext3,
-            "ext4": ln.ext4, "ext5": ln.ext5,
-            "event_name": h.event_name,
-            "main_action": h.main_action,
-            "remark": h.remark,
+            "prod_name": prod_name,
+            "prod_spec": prod_spec,
+            "code": ln.code,
+            "owner_name": corps.lookup(ln.owner_corp_id) if corps else "",
+            "customer_name": corps.lookup(ln.to_corp_id) if corps else "",
         })
     return rows
 
 
-def _direction(h):
-    """业务方向：根据 StoreType 判断。"""
-    st = (h.store_type or "").lower()
-    act = (h.main_action or "").lower()
-    if "out" in st or "out" in act:
-        return "出库"
-    if "in" in st or "in" in act:
-        return "入库"
-    return ""
-
-
-def bill_summary_rows(doc: BillDoc):
-    """按产品汇总：声明量 vs 实际条数。"""
-    actual = {}
-    for ln in doc.lines:
-        actual[ln.product_code] = actual.get(ln.product_code, 0) + 1
-    rows = []
-    for i, p in enumerate(doc.products, 1):
-        act = actual.get(p.code, 0)
-        diff = act - p.amount
-        rows.append({
-            "seq": i,
-            "product_code": p.code,
-            "pack_unit": p.pack_unit,
-            "declared": p.amount,
-            "actual": act,
-            "diff": diff,
-            "verdict": "一致" if diff == 0 else ("多 " + str(diff) if diff > 0 else "少 " + str(-diff)),
-            "batch_no": p.batch_no,
-            "has_codes": p.has_codes,
-            "file": doc.file_name,
-            "store_no": doc.header.store_no,
-        })
-    # 明细里出现但产品声明里没有的产品
-    for code, act in actual.items():
-        if not any(p.code == code for p in doc.products):
-            rows.append({
-                "seq": len(rows) + 1,
-                "product_code": code,
-                "pack_unit": "",
-                "declared": 0,
-                "actual": act,
-                "diff": act,
-                "verdict": "未声明",
-                "batch_no": "",
-                "has_codes": "",
-                "file": doc.file_name,
-                "store_no": doc.header.store_no,
-            })
-    return rows
-
-
-# ---------------------------------------------------------------- 文件 B
+# ---------------------------------------------------------------- 生产入库单
 
 def _group_ctx(g, box, box_no, item_no):
     """一组共用字段。"""

@@ -4,12 +4,12 @@ import xml.etree.ElementTree as ET
 
 XSI_SCHEMA = "{http://www.w3.org/2001/XMLSchema-instance}noNamespaceSchemaLocation"
 
-TYPE_BILL = "bill"            # 终端接口：出入库单（DocHeader + Data）
+TYPE_BILL = "bill"            # 终端接口：销售出库单（DocHeader + Data）
 TYPE_RELATION = "relation"    # 关联关系：生产入库单（Relation + Batch + Code）
 TYPE_UNKNOWN = "unknown"
 
 TYPE_LABEL = {
-    TYPE_BILL: "出入库单（终端接口）",
+    TYPE_BILL: "销售出库单（终端接口）",
     TYPE_RELATION: "生产入库单（关联关系）",
     TYPE_UNKNOWN: "未知格式",
 }
@@ -81,6 +81,6 @@ def detect(root):
     if by_struct:
         return by_struct, "按结构判定"
     raise DetectError(
-        "既不是出入库单，也不是生产入库单。"
+        "既不是销售出库单，也不是生产入库单。"
         f"根节点={root.tag}，子节点={[c.tag for c in root][:6]}"
     )

@@ -15,7 +15,6 @@
 """
 
 # ============================================================ 生产入库单（文件B）
-
 # 每盒一行
 BOX_ITEM_COLUMNS = [
     ("seq",           "序号",       "auto", 8),
@@ -77,40 +76,21 @@ CODE_ALL_COLUMNS = [
 
 # ============================================================ 出入库单（文件A）
 
-BILL_COLUMNS = [
-    ("seq",             "序号",       "auto", 8),
-    ("store_no",        "单据号",     "text", 20),
-    ("direction",       "业务方向",   "text", 10),
-    ("store_type",      "单据类型",   "text", 14),
-    ("act_date",        "操作时间",   "text", 20),
-    ("bill_time",       "单据时间",   "text", 20),
-    ("operate_date",    "录入时间",   "text", 20),
-    ("product_code",    "产品码",     "text", 18),
-    ("code",            "UDI码",      "text", 32),
-    ("pack_flag",       "包装标识",   "text", 10),
-    ("serial",          "流水号",     "text", 15),
-    ("pack_unit",       "单位",       "text", 8),
-    ("declared_amount", "声明数量",   "auto", 10),
-    ("operator",        "操作人",     "text", 12),
-    ("owner_corp",      "货主",       "text", 10),
-    ("to_corp",         "往来单位",   "text", 10),
-    ("corp_order",      "关联单号",   "text", 20),
-    ("wrong_code",      "错码标记",   "text", 10),
-    ("event_name",      "事件",       "text", 20),
-    ("file",            "来源文件",   "text", 38),
-]
+# ============================================================ 销售出库单（文件A）
 
-BILL_SUMMARY_COLUMNS = [
-    ("seq",          "序号",     "auto", 8),
-    ("product_code", "产品码",   "text", 18),
-    ("pack_unit",    "单位",     "text", 8),
-    ("declared",     "声明数量", "auto", 10),
-    ("actual",       "实际条数", "auto", 10),
-    ("diff",         "差异",     "auto", 10),
-    ("verdict",      "判定",     "text", 14),
-    ("batch_no",     "批次号",   "text", 16),
-    ("store_no",     "单据号",   "text", 20),
-    ("file",         "来源文件", "text", 38),
+# 8 列。已按业务要求精简：原「业务方向/单据类型/三个时间/包装标识/流水号/单位/
+# 声明数量/操作人/关联单号/错码标记/事件/来源文件」全部去掉。
+# 「成品名称、规格(型号)」由产品主数据按 DI码 查出；
+# 「供货者、客户名称」由法人主数据按机构编码查出。
+BILL_COLUMNS = [
+    ("seq",           "序号",       "auto", 8),
+    ("store_no",      "DN号",       "text", 22),
+    ("product_code",  "DI码",       "text", 18),
+    ("prod_name",     "成品名称",   "text", 30),
+    ("prod_spec",     "规格(型号)", "text", 26),
+    ("code",          "UDI码",      "text", 32),
+    ("owner_name",    "供货者",     "text", 26),
+    ("customer_name", "客户名称",   "text", 26),
 ]
 
 ISSUE_COLUMNS = [
@@ -118,6 +98,27 @@ ISSUE_COLUMNS = [
     ("rule",     "规则", "text", 26),
     ("location", "位置", "text", 40),
     ("message",  "说明", "text", 80),
+]
+
+# ============================================================ 主数据
+
+# 产品主数据：DI码为主键，对应模板列的「最小销售单元产品标识（UDI）」。
+# 模板 7 列全存着，输出 Excel 只用到 prod_name（成品名称）和 spec（规格(型号)）。
+# 其余 4 列保留是为了「导入不丢数据」，以后想在输出里加列，直接改 BILL_COLUMNS 即可。
+MASTER_PRODUCT_COLUMNS = [
+    ("di_code",        "最小销售单元产品标识（UDI）", "text", 24),
+    ("box_code",       "大箱标识",                    "text", 24),
+    ("sap_code",       "SAP编码",                     "text", 16),
+    ("prod_name",      "产品名称/通用名称",           "text", 32),
+    ("spec",           "规格型号",                    "text", 32),
+    ("storage_cond",   "特殊储存或操作条件",          "text", 24),
+    ("category",       "分类",                        "text", 10),
+]
+
+# 法人主数据：法人编码为主键（XML 里是 OwnerCorpID / ToCorpID 的形式，如 A100）
+MASTER_CORP_COLUMNS = [
+    ("corp_code", "法人编码", "text", 16),
+    ("corp_name", "法人名称", "text", 40),
 ]
 
 # ============================================================ Sheet 名称与顺序
@@ -130,9 +131,8 @@ SHEETS_RELATION = [
 ]
 
 SHEETS_BILL = [
-    ("出入库明细", BILL_COLUMNS),
-    ("产品汇总",   BILL_SUMMARY_COLUMNS),
-    ("校验",       ISSUE_COLUMNS),
+    ("销售出库明细", BILL_COLUMNS),
+    ("校验",         ISSUE_COLUMNS),
 ]
 
 # 判定为"错误"时是否用红底标出（写盘不改数据，只改样式）

@@ -7,29 +7,52 @@ LEVEL_WARN = "警告"
 LEVEL_INFO = "提示"
 
 
-def validate_bill(doc: BillDoc):
-    """出入库单校验。"""
+def validate_bill(doc: BillDoc, products=None, corps=None):
+    """销售出库单校验。
+
+    products / corps 是主数据索引。传了就额外检查 DI码 / 机构编码 是否登记过，
+    没登记记「提示」级 —— 它不影响出单，只是提醒去补主数据。
+    """
     issues = []
 
-    # A_AMOUNT_MISMATCH：声明量 vs 实际明细条数
-    actual = {}
-    for ln in doc.lines:
-        actual[ln.product_code] = actual.get(ln.product_code, 0) + 1
-    for p in doc.products:
-        act = actual.get(p.code, 0)
-        if act != p.amount:
-            issues.append(Issue(
-                rule="A_AMOUNT_MISMATCH", level=LEVEL_WARN,
-                location=f"产品 {p.code}",
-                message=f"声明数量 {p.amount}，实际明细 {act} 条，差异 {act - p.amount:+}",
-            ))
-    for code, act in actual.items():
-        if not any(p.code == code for p in doc.products):
-            issues.append(Issue(
-                rule="A_UNDECLARED_PRODUCT", level=LEVEL_WARN,
-                location=f"产品 {code}",
-                message=f"明细中出现 {act} 条，但 HasProducts 未声明该产品",
-            ))
+    # M_PRODUCT_NOT_FOUND：DI码 在产品主数据里查不到
+    if products is not None:
+        reported = set()
+        for ln in doc.lines:
+            di = ln.product_code
+            if di in reported:
+                continue
+            if not di:
+                reported.add(di)
+                issues.append(Issue(
+                    rule="M_PRODUCT_NOT_FOUND", level=LEVEL_INFO,
+                    location=f"第 {ln.seq} 条",
+                    message="明细没有 DI码，无法匹配成品名称和规格",
+                ))
+                continue
+            if di not in products:
+                reported.add(di)
+                issues.append(Issue(
+                    rule="M_PRODUCT_NOT_FOUND", level=LEVEL_INFO,
+                    location=f"DI码 {di}",
+                    message=f"DI码 {di} 未在「产品主数据」中登记，成品名称/规格留空",
+                ))
+
+    # M_CORP_NOT_FOUND：法人编码在法人主数据里查不到
+    if corps is not None:
+        for field, label in (("owner_corp_id", "供货者"), ("to_corp_id", "客户名称")):
+            reported = set()
+            for ln in doc.lines:
+                code = getattr(ln, field)
+                if not code or code in reported:
+                    continue
+                if code not in corps:
+                    reported.add(code)
+                    issues.append(Issue(
+                        rule="M_CORP_NOT_FOUND", level=LEVEL_INFO,
+                        location=f"第 {ln.seq} 条",
+                        message=f"{label}编码 {code} 未在「法人主数据」中登记，名称留空",
+                    ))
 
     # A_DUP_CODE：同单内码重复
     seen = {}

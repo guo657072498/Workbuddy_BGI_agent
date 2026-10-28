@@ -7,6 +7,7 @@ import os
 import re
 
 from config import columns as C
+from masterdata import store as md_store
 from udi_parser import crosscheck, detect, flatten, parse_bill, parse_relation, validate
 from udi_parser.source import XmlSource
 from xlsx import verify_file, write_workbook
@@ -42,6 +43,12 @@ class TaskResult:
         return "、".join(f"{k} {cnt[k]}" for k in order if k in cnt)
 
 
+def _sanitize(name):
+    """把任意字符串转成安全的文件名主干（不含扩展名）。"""
+    name = re.sub(r'[\\/:*?"<>|\r\n\t]', "_", name or "").strip()
+    return name.strip(". ") or ""
+
+
 def _safe_name(name):
     """把展示名转成安全的输出文件名。
 
@@ -51,8 +58,20 @@ def _safe_name(name):
         name = name.split("›")[-1].strip()
     base = os.path.basename(name.replace("\\", "/"))
     base = os.path.splitext(base)[0]
-    base = re.sub(r'[\\/:*?"<>|\r\n\t]', "_", base).strip()
-    return base or "output"
+    return _sanitize(base) or "output"
+
+
+def _output_base(doc, ftype):
+    """输出文件名主干。
+
+    销售出库单：优先用 DN号（同一单多行明细取第一条的），DN号为空时回退源文件名。
+    生产入库单：沿用源文件名。
+    """
+    if ftype == TYPE_BILL:
+        dn = _sanitize((doc.header.store_no or "").strip())
+        if dn:
+            return dn
+    return _safe_name(doc.file_name or "")
 
 
 def _unique_path(out_dir, base):
@@ -73,28 +92,23 @@ def _issue_rows(issues):
             for i in issues]
 
 
-def build_sheets(doc, ftype, cross_map=None, cross_issues=None):
-    """按文档类型生成 (sheet名, 列定义, 行数据) 列表。"""
+def build_sheets(doc, ftype, cross_map=None, cross_issues=None,
+                 products=None, corps=None):
+    """按文档类型生成 (sheet名, 列定义, 行数据) 列表。
+
+    销售出库单：销售出库明细 + 校验 两个 sheet。
+    生产入库单：盒明细 + 箱汇总 + 码清单 + 校验 四个 sheet。
+    """
     if ftype == TYPE_BILL:
-        issues = validate.validate_bill(doc)
-        detail = flatten.bill_rows(doc)
-        for row in detail:
-            hit = (cross_map or {}).get(row["code"]) if cross_map else None
-            row["box_code_link"] = hit["box_code"] if hit else ""
-            row["batch_link"] = hit["batch_no"] if hit else ""
-        cols = list(C.BILL_COLUMNS)
-        if cross_map:
-            cols = cols + [
-                ("box_code_link", "所属箱码", "text", 32),
-                ("batch_link",    "所属批次", "text", 16),
-            ]
+        detail = flatten.bill_rows(doc, products=products, corps=corps)
+        issues = validate.validate_bill(doc, products=products, corps=corps)
         all_issues = issues + list(cross_issues or [])
         sheets = [
-            ("出入库明细", cols, detail),
-            ("产品汇总", C.BILL_SUMMARY_COLUMNS, flatten.bill_summary_rows(doc)),
-            ("校验", C.ISSUE_COLUMNS, _issue_rows(all_issues)),
+            (C.SHEETS_BILL[0][0], C.SHEETS_BILL[0][1], detail),
+            (C.SHEETS_BILL[1][0], C.SHEETS_BILL[1][1], _issue_rows(all_issues)),
         ]
-        info = f"{len(doc.products)} 个产品 / {len(detail)} 条明细"
+        dn = (doc.header.store_no or "").strip()
+        info = f"DN号 {dn or '(无)'} / {len(detail)} 条明细"
         return sheets, info, all_issues
 
     issues = validate.validate_relation(doc)
@@ -156,6 +170,16 @@ def convert(sources, out_dir, engine="auto", progress=None, cancel=None, log=Non
     total = len(sources)
     results, global_errors = [], []
 
+    # ---- 主数据：一次读盘，逐行查内存
+    products, corps, md_errors = md_store.load_indexes()
+    for e in md_errors:
+        _log(f"主数据：{e}", "error")
+    if not md_errors:
+        _log(f"主数据：产品 {len(products)} 条、法人 {len(corps)} 条", "info")
+        if products.duplicates or corps.duplicates:
+            _log(f"主数据：存在重复主键（产品 {products.duplicates} 条、法人 {corps.duplicates} 条），"
+                 f"后出现的覆盖前面的，建议检查", "warn")
+
     # ---- 第一遍：解析，建交叉索引
     _log(f"开始解析 {total} 个文件…")
     bill_docs, rel_docs = [], []
@@ -205,12 +229,20 @@ def convert(sources, out_dir, engine="auto", progress=None, cancel=None, log=Non
         r.ftype = ftype
         r.type_label = detect.TYPE_LABEL[ftype]
         try:
+            # 交叉提示只挂到本条明细真正涉及的码，避免整批文件的提示挤进每个文件
+            own_issues = None
+            if ftype == TYPE_BILL and cross_issues:
+                codes = {ln.code for ln in doc.lines}
+                own_issues = [i for i in cross_issues if any(c in i.message for c in codes)]
+
             sheets, info, issues = build_sheets(
                 doc, ftype,
-                cross_map if ftype == TYPE_BILL else None,
-                cross_issues if ftype == TYPE_BILL else None,
+                cross_map=cross_map if ftype == TYPE_BILL else None,
+                cross_issues=own_issues,
+                products=products,
+                corps=corps,
             )
-            base = _safe_name(src.display_name)
+            base = _output_base(doc, ftype)
             out_path = _unique_path(out_dir, base)
             used = write_workbook(out_path, sheets, engine=engine,
                                   highlight=C.HIGHLIGHT_ERROR)

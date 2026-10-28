@@ -1,12 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller 打包配置：单文件、无控制台窗口、全量收集本项目模块。"""
 
+import os
+
 block_cipher = None
 
 # 本项目所有模块显式列出，避免 PyInstaller 漏收（此前漏了 udi_parser.source）
 PROJECT_MODULES = [
     "converter",
     "config.columns",
+    "masterdata.store",
+    "masterdata.importing",
+    "masterdata.dialog",
     "udi_parser.models",
     "udi_parser.detect",
     "udi_parser.source",
@@ -25,11 +30,22 @@ EXCLUDES = [
     "sqlite3", "pydoc_data", "unittest", "pdb", "doctest",
 ]
 
+# 主数据内置种子：首次启动时写到 exe 同目录的「主数据」下
+# 注意：Analysis(datas=...) 的 2 元组顺序是 (源文件, 目标目录)，且目标目录
+#       末尾要带斜杠，否则 PyInstaller 会拼成 "...xlsx\products.xlsx" 这种坏路径。
+#       a.datas.append(...) 才是 (目标路径, 源路径, "DATA") 三元组。两者不能混。
+_SEED_FILES = ["data/masterdata/products.xlsx", "data/masterdata/corps.xlsx"]
+_DATAS = []
+for _src in _SEED_FILES:
+    if not os.path.isfile(_src):
+        raise SystemExit(f"[打包中止] 缺少内置主数据种子：{_src}")
+    _DATAS.append((_src, "data/masterdata/"))
+
 a = Analysis(
     ["gui.py"],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=_DATAS,
     hiddenimports=PROJECT_MODULES,
     hookspath=[],
     hooksconfig={},
@@ -43,7 +59,6 @@ a = Analysis(
 
 # 把 tkinterdnd2 自带的 tkdnd 二进制和 tcl 脚本收进来（拖拽功能依赖）
 # 注意：PyInstaller 6.x 的 datas 需要 3 元组 (目标目录, 源路径, 类型)
-import os
 try:
     import tkinterdnd2
     _dnd_dir = os.path.dirname(tkinterdnd2.__file__)
