@@ -9,11 +9,10 @@
 |---|---|---|---|---|---|
 | 20261026-udi-xml-tool | 已完成 | 代码 | 2026-10-26 | UDI XML 转 Excel（v2.0.0），免安装 exe，支持压缩包批量与主数据映射 | [详情](tasks/20261026-udi-xml-tool/README.md) · [版本](tasks/20261026-udi-xml-tool/VERSIONS.md) |
 | 20261026-docs-refactor | 已完成 | 文档 | 2026-10-26 | 规范文档拆分：敏感清单收口、README 瘦身、gitignore 收紧 | [详情](tasks/20261026-docs-refactor/README.md) |
+| 20261104-e10-login-tool | 已完成 | 代码 | 2026-11-04 | OA 登录工具 v1.3.0：用户级技能 e10-oa-login，装一次后登录近无感（一次写两套 CLI 认证） | [详情](tasks/20261104-e10-login-tool/README.md) · [版本](tasks/20261104-e10-login-tool/VERSIONS.md) |
+| 20261106-mes-dashboard | 已完成 | 文档 | 2026-11-06 | 钉钉 AI 表格《MES记录修改需求》642 条只读分析 + HTML 数据看板（未动钉钉原文档） | [详情](tasks/20261106-mes-dashboard/README.md) |
 
-**状态词**（只允许这 5 个值）：`进行中` / `已完成` / `已归档` / `暂停` / `废弃`
-
-- `已完成` = 活儿干完了
-- `已归档` = 文件夹被移进了 `archive/`，常规归档动作**不改状态**
+状态词及各状态的验收口径见 `AGENTS.md`「状态词表」。常规归档动作不改变任务状态。
 
 ## 怎么用这个工作区
 
@@ -30,6 +29,7 @@
 |---|---|
 | `tasks/` | 所有任务，命名 `YYYYMMDD-英文短名`（日期=创建日，永不改） |
 | `tasks/_template/` | 新任务 README 骨架 |
+| `tools/` | 跨任务共享的工具或运行环境；归属与版本由使用它的任务记录 |
 | `AGENTS.md` | 规则源：身份、命名、目录三分法、状态词、版本管理、提交格式 |
 | `docs/ARCHIVE.md` | 归档执行手册（6 步命令） |
 | `docs/SECURITY.md` | 敏感信息唯一权威清单 |

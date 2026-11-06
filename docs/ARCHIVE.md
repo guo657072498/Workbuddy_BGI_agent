@@ -17,6 +17,15 @@ git status --porcelain -uall
 - 若发现**不属于该任务**的改动（比如顺手改的配置、别的任务的草稿），单独问是否一起提交
 - 若有未跟踪的新任务文件夹，确认它是否属于本次归档范围
 
+范围确认后，**立即按具体路径暂存一次**，后续所有内容、体积和规范检查都以这份暂存快照为准：
+
+```bash
+git add -- <本次确认的具体路径...>
+# 示例：git add -- tasks/<任务名> README.md AGENTS.md docs/ .gitignore .workbuddy/memory/<今天>.md
+```
+
+不要用 `git add -A`。若暂存后发现范围不对，只对本次路径执行 `git restore --staged -- <路径>`，不要覆盖工作区文件。
+
 ---
 
 ## 第 2 步 · 敏感信息扫描（强制，无例外）
@@ -27,25 +36,27 @@ git status --porcelain -uall
 ### 2.1 凭据文件
 
 ```bash
-git add -A --dry-run | grep -iE "\.env|\.pem|\.key|credential|secret|token|password"
+git diff --cached --name-only | grep -iE "\.env|\.pem|\.key|\.pfx|\.p12|credential|secret|token|password|cookie|login-state|session-state"
 ```
 
-命中 → 检查是否会入库；若已入库则移除并加进 `.gitignore`。
+命中 → 检查是否确实属于敏感文件；确认敏感则停止并移出暂存，同时核对 `.gitignore`。仅文件名命中但确认是无敏感内容的占位样例时，记录判断依据。
 
-### 2.2 代码里的硬编码密钥
+### 2.2 全部拟提交文本里的硬编码密钥
+
+第 1 步已经完成暂存，因此这里能覆盖新文件和未暂存修改，而不是只查历史暂存内容：
 
 ```bash
 git diff --cached -U0 | grep -inE "password|passwd|secret|token|api[_-]?key|access[_-]?key" | head -30
 ```
 
-排除变量名、注释后确认为真实密钥 → 停止，改为读环境变量或配置文件。
+检查范围包括源码、配置、根目录文件、`tools/`、HTML/JSON/CSV 和 `.workbuddy/memory/`。排除变量名、注释后确认为真实密钥 → 停止，改为读环境变量或配置文件。命中较多时还要分段检查完整暂存 diff，不能只靠前 30 行判断安全。
 
-### 2.3 样例数据里的真实信息（**办公类任务最高风险项**）
+### 2.3 真实信息与内部业务数据（**办公类任务最高风险项**）
 
-检查 `samples/`、`deliverables/`、测试数据里是否含真实客户、患者、员工信息。
+检查全部拟提交文件，重点包括 `samples/`、`deliverables/`、测试数据、工作日志和可视化成果，确认是否含真实客户、患者、员工信息或可回溯的真实业务明细。
 字段清单和脱敏对照表见 `docs/SECURITY.md` 第 3 节。
 
-含真实信息 → 替换为脱敏样例并**重跑一次程序**确认逻辑仍通过，**不是删掉了事**，因为样例本身有价值。
+含真实信息 → 替换为脱敏样例或最小化汇总结果，并**重跑一次程序**确认逻辑仍通过，**不是删掉了事**，因为样例本身有价值。
 
 ### 2.4 Office 文档属性
 
@@ -57,13 +68,12 @@ git diff --cached -U0 | grep -inE "password|passwd|secret|token|api[_-]?key|acce
 
 ### 3.1 体积阈值
 
-按本次改动涉及的文件逐个取真实 blob 体积（`git cat-file -s` 读的是已入库对象，对未跟踪文件不适用，因此先用 `git add` 暂存再查索引）：
+第 1 步已按范围暂存，这里直接逐个读取索引中的真实 blob 体积。使用 NUL 分隔文件名，避免中文、空格和转义字符导致漏查：
 
 ```bash
-git add -A
-git diff --cached --name-only | while read -r f; do
-  git cat-file -s "$(git rev-parse ":$f" 2>/dev/null)" 2>/dev/null \
-    | awk -v f="$f" '{printf "%10.1f MB  %s\n", $1/1048576, f}'
+git diff --cached --name-only --diff-filter=ACMR -z | while IFS= read -r -d '' f; do
+  size=$(git cat-file -s ":$f")
+  awk -v size="$size" -v f="$f" 'BEGIN {printf "%10.1f MB  %s\n", size/1048576, f}'
 done | sort -rn | head -10
 ```
 
@@ -74,7 +84,7 @@ done | sort -rn | head -10
 | < 10 MB | 正常入库 |
 
 > 参照：GitHub 单文件硬上限 100 MB，超过会拒绝推送。
-> 注意：第 1 步之后若发现范围不对，用 `git restore --staged .` 撤销暂存。
+> 注意：若发现范围不对，只撤销本次暂存的具体路径，不要改动工作区文件。
 
 ### 3.2 运行产物误入检查
 
@@ -83,10 +93,10 @@ done | sort -rn | head -10
 
 ```bash
 # (a) 忽略规则本身是否仍生效（应逐个命中，命中说明规则有效）
-git check-ignore -v tasks/*/output/x.xlsx tasks/*/输出结果/x.xlsx tasks/*/_out/x.txt
+git check-ignore -v --no-index tasks/demo/output/x.xlsx tasks/demo/输出结果/x.xlsx tasks/demo/_out/x.txt tasks/demo/dist/输出结果/x.xlsx
 
 # (b) 已经存在于版本库中的运行产物（规则失效的历史遗留）
-git ls-files | grep -E "tasks/[^/]+/(_out|output|输出结果)/"
+git ls-files | grep -E "tasks/[^/]+/(_out|output|输出结果)/|tasks/[^/]+/dist/输出结果/"
 ```
 
 - (a) **没有任何输出** → `.gitignore` 规则被误改，立即修正
@@ -118,6 +128,9 @@ git ls-files | grep -E "__pycache__|\.pyc$|\.egg-info|/build/"
 - [ ] 根 `README.md` 索引表里有该任务行，且状态列用词在词表内
 - [ ] 根索引的「位置」链接能点到（路径正确、含日期前缀）
 - [ ] 若本任务产生了新交付物，其路径已写进任务 README
+- [ ] 若状态改为 `已完成`，已满足 `AGENTS.md` 的最低验收标准并留有验证记录
+- [ ] 工具、技能或持续迭代成果已执行 `AGENTS.md` 的版本检查清单；一次性成果首次交付可不建版本台账
+- [ ] 共享代码放在 `tools/` 时，所属任务 README 已写明用途、来源、版本和维护责任
 - [ ] `docs/` 下的规范文件若有改动，`AGENTS.md` 的文档地图是否仍准确
 
 ---
@@ -148,11 +161,11 @@ git ls-files | grep -E "__pycache__|\.pyc$|\.egg-info|/build/"
 
 ## 第 6 步 · 提交与推送
 
-第 1 步确认范围后，**按具体路径暂存**，不要用 `git add -A` 把 IDE 的自动改动一起裹进去：
+第 1 步已经按具体路径完成暂存，这里不再执行 `git add`，避免把检查期间产生的 IDE 自动改动裹进去：
 
 ```bash
-git add tasks/<任务名> README.md docs/ .workbuddy/memory/<今天>.md
-git status --porcelain          # 再确认一次暂存内容
+git status --porcelain          # 再确认一次暂存与未暂存内容
+git diff --cached --check      # 检查空白错误等基础问题
 git commit -m "<类型>(<任务名>): <说明>"
 git push origin main
 ```
@@ -181,7 +194,8 @@ git push origin main
 | `deliverables/` 里叫 `output` 的东西 | **入库** | 它是交付物，名字不影响性质 |
 | 依赖（`node_modules`、`.venv`、`__pycache__`） | **不入库** | 可重装 |
 | > 50MB 原始数据 | **不入库** | README 记来源 |
-| 含密钥或真实个人信息的文件 | **不入库** | 安全底线，见 `docs/SECURITY.md` |
+| 含密钥、真实个人信息或真实业务明细的文件 | **不入库** | 安全底线，见 `docs/SECURITY.md` |
+| 登录状态记录、工作日志中的业务明细 | **不入库** | 状态记录只留本机；日志只留结论，不复制明细 |
 
 ### exe 更新策略
 

@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MES 记录修改需求 · 数据看板</title>
+<style>
+  :root {
+    --bg: #f4f6fa; --card: #ffffff; --ink: #1f2937; --ink-2: #6b7280; --ink-3: #9ca3af;
+    --line: #e5e7eb; --blue: #3b82f6; --green: #10b981; --red: #ef4444; --orange: #f59e0b;
+    --gray: #cbd5e1; --purple: #8b5cf6; --teal: #14b8a6;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+    background: var(--bg); color: var(--ink); padding: 28px 20px 40px;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  /* ---------- 头部 ---------- */
+  .head { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px; margin-bottom: 22px; }
+  .head h1 { font-size: 26px; font-weight: 700; letter-spacing: .5px; }
+  .head h1 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--blue); margin-right: 10px; vertical-align: 4px; }
+  .head .sub { color: var(--ink-2); font-size: 13px; margin-top: 6px; }
+  .badge { font-size: 12px; color: var(--ink-2); background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; }
+
+  /* ---------- KPI ---------- */
+  .kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; margin-bottom: 20px; }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; position: relative; overflow: hidden; }
+  .kpi::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--kc, var(--blue)); }
+  .kpi .label { font-size: 12.5px; color: var(--ink-2); }
+  .kpi .num { font-size: 30px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .kpi .note { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+  .kpi.g { --kc: var(--green); } .kpi.r { --kc: var(--red); } .kpi.o { --kc: var(--orange); }
+  .kpi.n { --kc: var(--gray); } .kpi.p { --kc: var(--purple); }
+
+  /* ---------- 布局 ---------- */
+  .grid { display: grid; gap: 16px; margin-bottom: 16px; }
+  .g2 { grid-template-columns: 2fr 1fr; }
+  .g2e { grid-template-columns: 1fr 1fr; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
+  .card h3 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .card .desc { font-size: 12px; color: var(--ink-3); margin-bottom: 14px; }
+
+  /* ---------- 洞察 ---------- */
+  .insights { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 16px; }
+  .insight { background: linear-gradient(135deg, #eff6ff, #f8fafc); border: 1px solid #dbeafe; border-radius: 14px; padding: 15px 17px; }
+  .insight b { display: block; font-size: 13.5px; margin-bottom: 6px; }
+  .insight p { font-size: 12.5px; color: var(--ink-2); line-height: 1.65; }
+  .insight .hl { color: var(--blue); font-weight: 600; }
+
+  /* ---------- 表格 ---------- */
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; color: var(--ink-2); font-weight: 500; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 9px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .tag { display: inline-block; font-size: 11px; padding: 2px 9px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+  .tag.r { background: #fee2e2; color: #b91c1c; }
+  .tag.o { background: #fef3c7; color: #b45309; }
+  .tag.g { background: #d1fae5; color: #047857; }
+  .tag.n { background: #f1f5f9; color: #64748b; }
+
+  /* ---------- 进度条 ---------- */
+  .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .bar-row .bl { width: 128px; font-size: 12.5px; color: var(--ink); text-align: right; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-row .track { flex: 1; height: 20px; background: #f1f5f9; border-radius: 6px; overflow: hidden; }
+  .bar-row .fill { height: 100%; border-radius: 6px; min-width: 2px; display: flex; align-items: center; justify-content: flex-end; }
+  .bar-row .fill span { font-size: 11px; color: #fff; padding-right: 6px; font-weight: 600; }
+  .bar-row .bv { width: 74px; font-size: 12px; color: var(--ink-2); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+
+  /* ---------- 数据质量 ---------- */
+  .quality { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .q-item { background: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; padding: 13px 15px; }
+  .q-item .qn { font-size: 22px; font-weight: 700; color: #b45309; }
+  .q-item .ql { font-size: 12px; color: var(--ink-2); margin-top: 3px; line-height: 1.5; }
+
+  .footer { text-align: center; color: var(--ink-3); font-size: 12px; margin-top: 26px; line-height: 1.8; }
+  .legend { display: flex; gap: 16px; font-size: 12px; color: var(--ink-2); margin: 2px 0 10px; flex-wrap: wrap; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+
+  @media (max-width: 900px) {
+    .kpis { grid-template-columns: repeat(3, 1fr); }
+    .g2, .g2e { grid-template-columns: 1fr; }
+    .insights { grid-template-columns: 1fr; }
+    .quality { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 头部 -->
+  <div class="head">
+    <div>
+      <h1><span class="dot"></span>MES 记录修改需求 · 数据看板</h1>
+      <div class="sub">数据周期：2025-10-30 ~ 2026-11-05（近 12 个月） · 主表《数据表》全量 642 条记录</div>
+    </div>
+    <div class="badge">只读分析 · 生成于 2026-11-06 · 钉钉 AI 表格快照</div>
+  </div>
+
+  <!-- KPI -->
+  <div class="kpis">
+    <div class="kpi"><div class="label">需求总量</div><div class="num">642</div><div class="note">条修改需求</div></div>
+    <div class="kpi g"><div class="label">已处理</div><div class="num">622</div><div class="note">完成率 96.9%</div></div>
+    <div class="kpi r"><div class="label">未处理</div><div class="num">7</div><div class="note">最长超过 6 个月</div></div>
+    <div class="kpi o"><div class="label">挂起</div><div class="num">4</div><div class="note">最长接近 11 个月</div></div>
+    <div class="kpi n"><div class="label">状态未标记</div><div class="num">9</div><div class="note">需补录状态</div></div>
+    <div class="kpi p"><div class="label">提出人</div><div class="num">36</div><div class="note">TOP5 占 53.9%</div></div>
+  </div>
+
+  <!-- 洞察 -->
+  <div class="insights">
+    <div class="insight"><b>📌 电子批记录是绝对主战场</b><p><span class="hl">533 条（83.0%）</span>属于电子批记录类修改，功能操作 106 条（16.5%）。批记录相关的录入、退库、清场纠错是日常运维的主要工作量来源。</p></div>
+    <div class="insight"><b>🧑‍🔧 人员操作失误占比过半</b><p>评估问题分类中<span class="hl">「人员操作失误」275 条，占已评估项的 63.8%</span>；系统 BUG + 疑似 BUG 合计 156 条（36.2%）。管理员分析中「用户操作问题」占 72.4%，两者相互印证——<b>操作培训与录入防呆</b>是降低需求量的关键抓手。</p></div>
+    <div class="insight"><b>📉 需求量近月明显回落</b><p>峰值出现在 2026-03（90 条），2025-12 / 2026-01 次之（79 / 71 条）；<span class="hl">近 3 个月月均仅 33 条</span>，较峰值下降约 63%。但 7 条未处理中最早一条已积压 6 个月，需要清欠。</p></div>
+  </div>
+
+  <!-- 月度趋势 + 修改类别 -->
+  <div class="grid g2">
+    <div class="card">
+      <h3>月度需求趋势（按处理状态堆叠）</h3>
+      <div class="desc">2025-10 ~ 2026-11 每月新增需求数量</div>
+      <div class="legend">
+        <span><i style="background:var(--green)"></i>已处理</span>
+        <span><i style="background:var(--red)"></i>未处理</span>
+        <span><i style="background:var(--orange)"></i>挂起</span>
+        <span><i style="background:var(--gray)"></i>未标记状态</span>
+      </div>
+      <svg viewBox="0 0 1060 300" width="100%" height="auto" role="img" aria-label="月度需求趋势堆叠柱状图">
+        <!-- 网格线 -->
+        <g stroke="#eef2f7" stroke-width="1">
+          <line x1="46" y1="40"  x2="1050" y2="40"/>
+          <line x1="46" y1="100" x2="1050" y2="100"/>
+          <line x1="46" y1="160" x2="1050" y2="160"/>
+          <line x1="46" y1="220" x2="1050" y2="220"/>
+        </g>
+        <g font-size="11" fill="#9ca3af" text-anchor="end">
+          <text x="40" y="44">90</text><text x="40" y="104">60</text>
+          <text x="40" y="164">30</text><text x="40" y="224">0</text>
+        </g>
+        <line x1="46" y1="220" x2="1050" y2="220" stroke="#d1d5db" stroke-width="1"/>
+        <!-- 柱：底部y=220，比例 2px/条；堆叠自下而上：绿(已处理)→红(未处理)→橙(挂起)→灰(未标记) -->
+        <g>
+          <!-- 25-10: 已5 -->
+          <rect x="65"  y="210" width="34" height="10"  rx="2" fill="#10b981"/>
+          <!-- 25-11: 已54 -->
+          <rect x="136" y="112" width="34" height="108" rx="2" fill="#10b981"/>
+          <!-- 25-12: 已78 挂1 -->
+          <rect x="208" y="64"  width="34" height="156" rx="2" fill="#10b981"/><rect x="208" y="62" width="34" height="2" fill="#f59e0b"/>
+          <!-- 26-01: 已69 挂1 灰1 -->
+          <rect x="279" y="82"  width="34" height="138" rx="2" fill="#10b981"/><rect x="279" y="80" width="34" height="2" fill="#f59e0b"/><rect x="279" y="78" width="34" height="2" fill="#cbd5e1"/>
+          <!-- 26-02: 已26 -->
+          <rect x="351" y="168" width="34" height="52"  rx="2" fill="#10b981"/>
+          <!-- 26-03: 已90 -->
+          <rect x="422" y="40"  width="34" height="180" rx="2" fill="#10b981"/>
+          <!-- 26-04: 已54 灰2 -->
+          <rect x="494" y="112" width="34" height="108" rx="2" fill="#10b981"/><rect x="494" y="108" width="34" height="4" fill="#cbd5e1"/>
+          <!-- 26-05: 已43 未1 -->
+          <rect x="565" y="134" width="34" height="86"  rx="2" fill="#10b981"/><rect x="565" y="132" width="34" height="2" fill="#ef4444"/>
+          <!-- 26-06: 已47 未4 灰1 -->
+          <rect x="637" y="126" width="34" height="94"  rx="2" fill="#10b981"/><rect x="637" y="118" width="34" height="8" fill="#ef4444"/><rect x="637" y="116" width="34" height="2" fill="#cbd5e1"/>
+          <!-- 26-07: 已49 未1 灰3 -->
+          <rect x="708" y="122" width="34" height="98"  rx="2" fill="#10b981"/><rect x="708" y="120" width="34" height="2" fill="#ef4444"/><rect x="708" y="114" width="34" height="6" fill="#cbd5e1"/>
+          <!-- 26-08: 已29 -->
+          <rect x="780" y="162" width="34" height="58"  rx="2" fill="#10b981"/>
+          <!-- 26-09: 已38 未1 灰1 -->
+          <rect x="851" y="144" width="34" height="76"  rx="2" fill="#10b981"/><rect x="851" y="142" width="34" height="2" fill="#ef4444"/><rect x="851" y="140" width="34" height="2" fill="#cbd5e1"/>
+          <!-- 26-10: 已31 -->
+          <rect x="923" y="158" width="34" height="62"  rx="2" fill="#10b981"/>
+          <!-- 26-11: 已9 挂2 灰1 -->
+          <rect x="994" y="202" width="34" height="18"  rx="2" fill="#10b981"/><rect x="994" y="198" width="34" height="4" fill="#f59e0b"/><rect x="994" y="196" width="34" height="2" fill="#cbd5e1"/>
+        </g>
+        <!-- 总数标注 -->
+        <g font-size="11" fill="#6b7280" text-anchor="middle" font-weight="600">
+          <text x="82"  y="204">5</text><text x="153" y="106">54</text><text x="225" y="56">79</text>
+          <text x="296" y="72">71</text><text x="368" y="162">26</text><text x="439" y="34" fill="#3b82f6">90</text>
+          <text x="511" y="102">56</text><text x="582" y="126">44</text><text x="654" y="110">52</text>
+          <text x="725" y="108">53</text><text x="797" y="156">29</text><text x="868" y="134">40</text>
+          <text x="940" y="152">31</text><text x="1011" y="190">12</text>
+        </g>
+        <!-- 月份轴 -->
+        <g font-size="10.5" fill="#9ca3af" text-anchor="middle">
+          <text x="82"  y="240">25-10</text><text x="153" y="240">25-11</text><text x="225" y="240">25-12</text>
+          <text x="296" y="240">26-01</text><text x="368" y="240">26-02</text><text x="439" y="240">26-03</text>
+          <text x="511" y="240">26-04</text><text x="582" y="240">26-05</text><text x="654" y="240">26-06</text>
+          <text x="725" y="240">26-07</text><text x="797" y="240">26-08</text><text x="868" y="240">26-09</text>
+          <text x="940" y="240">26-10</text><text x="1011" y="240">26-11*</text>
+        </g>
+        <text x="46" y="270" font-size="11" fill="#9ca3af">* 26-11 为月初前 5 天（11-01 ~ 11-05）数据，未满月。</text>
+        <!-- 峰值参考线 -->
+        <text x="439" y="30" font-size="10.5" fill="#3b82f6" text-anchor="middle">历史峰值</text>
+      </svg>
+    </div>
+
+    <div class="card">
+      <h3>修改类别占比</h3>
+      <div class="desc">需求所属业务类别（642 条）</div>
+      <svg viewBox="0 0 260 200" width="100%" role="img" aria-label="修改类别环形图" style="display:block;margin:0 auto;">
+        <g transform="translate(85,100)">
+          <!-- r=62, C=389.6 -->
+          <circle r="62" fill="none" stroke="#eef2f7" stroke-width="26"/>
+          <!-- 电子批记录 83.02% dash=323.5 -->
+          <circle r="62" fill="none" stroke="#3b82f6" stroke-width="26" stroke-dasharray="323.5 66.1" transform="rotate(-90)"/>
+          <!-- 功能操作 16.51% dash=64.3 -->
+          <circle r="62" fill="none" stroke="#14b8a6" stroke-width="26" stroke-dasharray="64.3 325.3" transform="rotate(208.9)"/>
+          <!-- 未标记 0.47% -->
+          <circle r="62" fill="none" stroke="#cbd5e1" stroke-width="26" stroke-dasharray="1.8 387.8" transform="rotate(268.4)"/>
+          <text x="0" y="-4" text-anchor="middle" font-size="26" font-weight="700" fill="#1f2937">83.0%</text>
+          <text x="0" y="16" text-anchor="middle" font-size="11" fill="#6b7280">电子批记录</text>
+        </g>
+        <g font-size="12" fill="#374151">
+          <rect x="176" y="70"  width="10" height="10" rx="2" fill="#3b82f6"/>
+          <text x="192" y="79">电子批记录 533</text>
+          <rect x="176" y="94"  width="10" height="10" rx="2" fill="#14b8a6"/>
+          <text x="192" y="103">功能操作 106</text>
+          <rect x="176" y="118" width="10" height="10" rx="2" fill="#cbd5e1"/>
+          <text x="192" y="127">未标记 3</text>
+        </g>
+      </svg>
+      <div class="desc" style="margin-top:10px;">未处理 7 条中 6 条为功能操作类，挂起 4 条全部为功能操作类——「功能操作」类需求流转更慢，多为功能优化与产品讨论型问题。</div>
+    </div>
+  </div>
+
+  <!-- 问题分类 + 管理员分析 -->
+  <div class="grid g2e">
+    <div class="card">
+      <h3>评估问题分类</h3>
+      <div class="desc">已评估 431 条 · 未评估 211 条（32.9%）</div>
+      <div class="bar-row"><div class="bl">人员操作失误</div><div class="track"><div class="fill" style="width:100%;background:#ef4444;"><span>275</span></div></div><div class="bv">63.8%</div></div>
+      <div class="bar-row"><div class="bl">疑似系统 BUG</div><div class="track"><div class="fill" style="width:32.0%;background:#f59e0b;"><span>88</span></div></div><div class="bv">20.4%</div></div>
+      <div class="bar-row"><div class="bl">系统 BUG</div><div class="track"><div class="fill" style="width:24.7%;background:#f97316;"><span>68</span></div></div><div class="bv">15.8%</div></div>
+      <div class="bar-row"><div class="bl">（未评估）</div><div class="track"><div class="fill" style="width:76.7%;background:#cbd5e1;"><span></span></div></div><div class="bv">211 条</div></div>
+      <div class="desc" style="margin-top:12px;">系统相关（BUG + 疑似）合计 156 条，占已评估项 36.2%，是程序侧需要持续治理的部分。</div>
+    </div>
+
+    <div class="card">
+      <h3>系统管理员分析</h3>
+      <div class="desc">已填写 319 条 · 未填写 323 条（50.3%）</div>
+      <div class="bar-row"><div class="bl">用户操作问题</div><div class="track"><div class="fill" style="width:100%;background:#3b82f6;"><span>231</span></div></div><div class="bv">72.4%</div></div>
+      <div class="bar-row"><div class="bl">程序 BUG</div><div class="track"><div class="fill" style="width:16.0%;background:#8b5cf6;"><span>37</span></div></div><div class="bv">11.6%</div></div>
+      <div class="bar-row"><div class="bl">系统配置问题</div><div class="track"><div class="fill" style="width:10.4%;background:#6366f1;"><span>24</span></div></div><div class="bv">7.5%</div></div>
+      <div class="bar-row"><div class="bl">解释 &amp; 澄清</div><div class="track"><div class="fill" style="width:9.5%;background:#14b8a6;"><span>22</span></div></div><div class="bv">6.9%</div></div>
+      <div class="bar-row"><div class="bl">跨系统集成问题</div><div class="track"><div class="fill" style="width:2.5%;background:#f59e0b;"></div></div><div class="bv">3 条</div></div>
+      <div class="bar-row"><div class="bl">功能限制，需优化</div><div class="track"><div class="fill" style="width:2.0%;background:#64748b;"></div></div><div class="bv">2 条</div></div>
+      <div class="desc" style="margin-top:12px;">「用户操作问题」与评估分类的「人员操作失误」高度一致，进一步支持加强培训与录入防呆。</div>
+    </div>
+  </div>
+
+  <!-- 提出人 + 数据质量 -->
+  <div class="grid g2e">
+    <div class="card">
+      <h3>需求提出人分布 TOP 10（匿名）</h3>
+      <div class="desc">共 36 人提出需求 · TOP5 合计 346 条（53.9%） · 仅保留排序与数量</div>
+      <div class="bar-row"><div class="bl">用户 A</div><div class="track"><div class="fill" style="width:100%;background:#8b5cf6;"><span>103</span></div></div><div class="bv">16.0%</div></div>
+      <div class="bar-row"><div class="bl">用户 B</div><div class="track"><div class="fill" style="width:83.5%;background:#8b5cf6;"><span>86</span></div></div><div class="bv">13.4%</div></div>
+      <div class="bar-row"><div class="bl">用户 C</div><div class="track"><div class="fill" style="width:61.2%;background:#a78bfa;"><span>63</span></div></div><div class="bv">9.8%</div></div>
+      <div class="bar-row"><div class="bl">用户 D</div><div class="track"><div class="fill" style="width:49.5%;background:#a78bfa;"><span>51</span></div></div><div class="bv">7.9%</div></div>
+      <div class="bar-row"><div class="bl">用户 E</div><div class="track"><div class="fill" style="width:41.7%;background:#a78bfa;"><span>43</span></div></div><div class="bv">6.7%</div></div>
+      <div class="bar-row"><div class="bl">用户 F</div><div class="track"><div class="fill" style="width:35.0%;background:#c4b5fd;"></div></div><div class="bv">36 条</div></div>
+      <div class="bar-row"><div class="bl">用户 G</div><div class="track"><div class="fill" style="width:24.3%;background:#c4b5fd;"></div></div><div class="bv">25 条</div></div>
+      <div class="bar-row"><div class="bl">用户 H</div><div class="track"><div class="fill" style="width:24.3%;background:#c4b5fd;"></div></div><div class="bv">25 条</div></div>
+      <div class="bar-row"><div class="bl">用户 I</div><div class="track"><div class="fill" style="width:24.3%;background:#c4b5fd;"></div></div><div class="bv">25 条</div></div>
+      <div class="bar-row"><div class="bl">用户 J</div><div class="track"><div class="fill" style="width:21.4%;background:#c4b5fd;"></div></div><div class="bv">22 条</div></div>
+    </div>
+
+    <div class="card">
+      <h3>字段填写质量（数据完整性）</h3>
+      <div class="desc">以下字段空值率偏高，影响后续精细化分析</div>
+      <div class="quality" style="grid-template-columns:repeat(2,1fr);">
+        <div class="q-item"><div class="qn">97.5%</div><div class="ql">「分析类别」未填写<br><span style="color:#9ca3af">642 条中仅 16 条有值</span></div></div>
+        <div class="q-item"><div class="qn">97.8%</div><div class="ql">「处理内容」未填写<br><span style="color:#9ca3af">642 条中仅 14 条有值</span></div></div>
+        <div class="q-item"><div class="qn">50.3%</div><div class="ql">「系统管理员分析」未填写<br><span style="color:#9ca3af">323 条无归类结论</span></div></div>
+        <div class="q-item"><div class="qn">32.9%</div><div class="ql">「评估问题分类」未填写<br><span style="color:#9ca3af">211 条无法归因</span></div></div>
+      </div>
+      <div class="desc" style="margin-top:12px;">建议：将「系统管理员分析」「评估问题分类」设为处理完成前的必填校验项，可显著提升看板归因能力。</div>
+    </div>
+  </div>
+
+  <!-- 待办汇总：入库前去除业务编号、具体日期与逐条明细 -->
+  <div class="card" style="margin-bottom:16px;">
+    <h3>待办汇总：未处理 / 挂起（共 11 条）</h3>
+    <div class="desc">另有 9 条历史记录状态未标记；此处仅保留模块、状态与数量，不展示可回溯的业务明细</div>
+    <table>
+      <thead><tr><th>模块</th><th style="width:90px;">状态</th><th style="width:70px;">数量</th><th>汇总主题</th></tr></thead>
+      <tbody>
+        <tr><td>线边仓</td><td><span class="tag r">未处理</span></td><td>4</td><td>入出库流水、批次口径、数量校验与防重复提交</td></tr>
+        <tr><td>销毁管理</td><td><span class="tag o">挂起</span></td><td>2</td><td>销毁流程与查询条件优化</td></tr>
+        <tr><td>设备管理</td><td><span class="tag r">未处理</span></td><td>2</td><td>参数项编码与使用上报日期筛选</td></tr>
+        <tr><td>电子批记录</td><td><span class="tag r">未处理</span></td><td>1</td><td>执行记录显示一致性</td></tr>
+        <tr><td>主数据集成</td><td><span class="tag o">挂起</span></td><td>1</td><td>主产品分类与系统集成排查</td></tr>
+        <tr><td>清场管理</td><td><span class="tag o">挂起</span></td><td>1</td><td>完工时间显示</td></tr>
+      </tbody>
+    </table>
+    <div class="desc" style="margin-top:12px;">观察：未处理项集中在<b>线边仓 / 设备管理</b>等模块，且多为「界面显示、卡控缺失、查询不便」类功能优化——可作为产品迭代的需求池。</div>
+  </div>
+
+  <!-- 深入分析 -->
+  <div class="card">
+    <h3>综合结论与建议</h3>
+    <div class="desc">基于 642 条记录的只读分析</div>
+    <table>
+      <tbody>
+        <tr><td style="width:36px;font-weight:700;color:#3b82f6;">1</td><td><b>处理效率高但存在长尾积压。</b>总体完成率 96.9%，月度新增大多当月清完；但 11 条未处理/挂起中 5 条已超过 3 个月，最长积压近 11 个月（2025-12 挂起项），建议每两周清理一次积压清单。</td></tr>
+        <tr><td style="font-weight:700;color:#3b82f6;">2</td><td><b>需求侧治理：防呆 &gt; 人工纠错。</b>63.8% 的已评估问题源于人员操作失误，典型场景是「入库双击、数量改错、批次填错」。与其事后修改记录，不如在<b>线边仓入库、退库、清场</b>等高频界面增加二次确认、不可逆操作卡控与数量校验。</td></tr>
+        <tr><td style="font-weight:700;color:#3b82f6;">3</td><td><b>程序侧：156 条 BUG 类需求。</b>系统 BUG 68 条 + 疑似 88 条，集中在 SAP-MES 集成、批记录显示、流水查询等链路，建议按模块做根因归类，优先修复重复出现次数多的模块。</td></tr>
+        <tr><td style="font-weight:700;color:#3b82f6;">4</td><td><b>需求高度集中，可做定向沟通。</b>TOP5 提出人贡献 53.9% 的需求，可邀请核心用户做一次需求梳理会，把高频纠错场景转化为系统改进项。</td></tr>
+        <tr><td style="font-weight:700;color:#3b82f6;">5</td><td><b>表格本身需要补数据。</b>「分析类别」「处理内容」两个结构化字段基本闲置（&gt;97% 空值），「系统管理员分析」也有一半空白。建议设为处理完成前的必填项，否则趋势之外的归因分析只能依赖人工读文本。</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    数据来源：钉钉 AI 表格《MES记录修改需求》主表「数据表」（642 条全量快照，2026-11-06 读取） · 本看板为只读分析产物，未修改钉钉文档任何内容<br>
+    分析口径：「处理率」= 已处理 / 总数；占比均基于各自有值记录计算；提出人已匿名，待办仅保留汇总
+  </div>
+</div>
+</body>
+</html>

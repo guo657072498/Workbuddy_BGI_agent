@@ -1,0 +1,28 @@
+帮我在这台电脑上配置泛微 OA 的登录态，让 e-Workflow 类技能能用我的账号查流程、发起流程。
+
+背景：OA 地址 https://oa.bgi.com，登录走公司 IAM 统一认证；e10-login 的 OIDC 浏览器授权会被服务端拒绝（提示 client_id 缺失或未在认证应用中注册），所以改用「浏览器正常登录后抓取会话」的方式建立登录态。
+
+请按顺序执行：
+
+1. 检查 e10-login 是否可用：执行 `e10-login --version`。
+   没有就安装——WorkBuddy 受管环境不要用 npm i -g，改成在项目目录执行
+   `env -u NODE_OPTIONS npm i e10-login`，之后用 `./node_modules/.bin/e10-login`。
+
+2. 写一个临时脚本（Node 22 内置 WebSocket + fetch 走 CDP 协议即可，
+   或用 playwright-core 调本机 Edge/Chrome），启动系统已装浏览器打开
+   https://oa.bgi.com，把窗口留给我——我会在里面正常登录（IAM 跳转 / 扫码）。
+
+3. 每 2 秒轮询一次该域名下的 cookie，出现 ETEAMSID 后执行：
+   `<e10-login> set --eteamsid "<值>" --base-url https://oa.bgi.com`
+   如果返回「未能获取 userId」，说明我还没登录完，继续等 30 秒再重试。
+
+4. 成功后执行 `<e10-login> whoami --live` 验证，把租户名、部门等非敏感信息
+   报给我；ETEAMSID 不要打印到对话里。
+
+5. 告诉我「登录态已就绪」，我就可以在 WorkBuddy 里查流程了。
+
+约束：
+- 5 分钟内没完成登录就退出，提示我重新运行
+- 凭据只写本地认证文件（~/.e10-cli/profiles/），不打印、不上传
+- 不要修改泛微技能包里的任何文件
+- 浏览器用临时配置目录启动，别动我日常浏览器的数据
